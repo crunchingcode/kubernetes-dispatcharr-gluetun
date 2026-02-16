@@ -2,6 +2,11 @@
 *.retry
 .ansible
 
+# Secrets - never commit these!
+vars/secrets.yml
+**/secrets.yml
+*.vault
+
 # Python
 __pycache__/
 *.py[cod]

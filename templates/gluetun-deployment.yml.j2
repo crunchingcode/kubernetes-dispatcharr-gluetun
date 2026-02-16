@@ -30,6 +30,18 @@ spec:
           value: "{{ gluetun.vpn_service_provider }}"
         - name: VPN_TYPE
           value: "{{ gluetun.vpn_type }}"
+{% if gluetun.use_secret | default(true) %}
+        - name: OPENVPN_USER
+          valueFrom:
+            secretKeyRef:
+              name: gluetun-vpn-credentials
+              key: vpn-user
+        - name: OPENVPN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: gluetun-vpn-credentials
+              key: vpn-password
+{% else %}
 {% if gluetun.openvpn_user %}
         - name: OPENVPN_USER
           value: "{{ gluetun.openvpn_user }}"
@@ -37,6 +49,7 @@ spec:
 {% if gluetun.openvpn_password %}
         - name: OPENVPN_PASSWORD
           value: "{{ gluetun.openvpn_password }}"
+{% endif %}
 {% endif %}
 {% if gluetun.server_countries %}
         - name: SERVER_COUNTRIES

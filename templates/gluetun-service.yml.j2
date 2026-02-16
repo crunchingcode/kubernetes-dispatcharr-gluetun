@@ -15,8 +15,8 @@ spec:
     port: {{ gluetun.ports.http_proxy }}
     targetPort: {{ gluetun.ports.http_proxy }}
     protocol: TCP
-{% if service.type == "NodePort" and service.nodePort %}
-    nodePort: {{ service.nodePort }}
+{% if service.type == "NodePort" and service.gluetun_nodePort %}
+    nodePort: {{ service.gluetun_nodePort }}
 {% endif %}
   - name: shadowsocks
     port: {{ gluetun.ports.shadowsocks }}

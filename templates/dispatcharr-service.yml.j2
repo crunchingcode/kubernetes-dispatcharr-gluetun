@@ -15,6 +15,6 @@ spec:
     port: {{ dispatcharr.port }}
     targetPort: {{ dispatcharr.port }}
     protocol: TCP
-{% if service.type == "NodePort" and service.nodePort %}
-    nodePort: {{ service.nodePort | int + 1 }}
+{% if service.type == "NodePort" and service.dispatcharr_nodePort %}
+    nodePort: {{ service.dispatcharr_nodePort }}
 {% endif %}

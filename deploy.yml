@@ -6,6 +6,12 @@
     - vars/main.yml
 
   tasks:
+    - name: Include secrets file if it exists
+      include_vars:
+        file: vars/secrets.yml
+      failed_when: false
+      tags: always
+
     - name: Create namespace
       kubernetes.core.k8s:
         state: present
@@ -14,6 +20,21 @@
           kind: Namespace
           metadata:
             name: "{{ namespace }}"
+
+    - name: Create VPN credentials secret
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: gluetun-vpn-credentials
+            namespace: "{{ namespace }}"
+          type: Opaque
+          stringData:
+            vpn-user: "{{ gluetun.openvpn_user | default('') }}"
+            vpn-password: "{{ gluetun.openvpn_password | default('') }}"
+      when: gluetun.use_secret | default(true)
 
     - name: Deploy gluetun VPN container
       kubernetes.core.k8s:

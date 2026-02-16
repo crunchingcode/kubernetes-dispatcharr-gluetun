@@ -46,10 +46,18 @@ cd kubernetes-dispatcharr-gluetun
 ansible-galaxy collection install -r requirements.yml
 
 # 3. Configure your VPN settings in vars/main.yml
-# Edit the file and add your VPN credentials and preferences
+# Edit the file and add your VPN preferences (not credentials!)
 nano vars/main.yml
 
-# 4. Run the playbook
+# 4. Set up credentials securely (choose one method):
+# Method A: Using Ansible Vault (recommended)
+cp vars/secrets.yml.example vars/secrets.yml
+nano vars/secrets.yml  # Add your credentials
+ansible-vault encrypt vars/secrets.yml
+
+# Method B: Provide via command line (see Configuration section)
+
+# 5. Run the playbook
 ansible-playbook -i inventory.yml deploy.yml
 ```
 
@@ -58,12 +66,63 @@ ansible-playbook -i inventory.yml deploy.yml
 For a quick deployment with default settings:
 
 ```bash
-ansible-playbook -i inventory.yml deploy.yml
+# With vault-encrypted secrets
+ansible-playbook -i inventory.yml deploy.yml --ask-vault-pass
+
+# Or with command-line credentials
+ansible-playbook -i inventory.yml deploy.yml \
+  -e "gluetun.openvpn_user=myuser" \
+  -e "gluetun.openvpn_password=mypass"
 ```
 
 ## Configuration
 
 All configuration is managed through `vars/main.yml`. Key settings include:
+
+### Secure Credential Management
+
+**IMPORTANT**: Never commit VPN credentials to version control!
+
+There are three recommended ways to provide credentials securely:
+
+#### Option 1: Ansible Vault (Recommended)
+
+1. Create a secrets file:
+   ```bash
+   cp vars/secrets.yml.example vars/secrets.yml
+   # Edit vars/secrets.yml with your credentials
+   nano vars/secrets.yml
+   ```
+
+2. Encrypt the secrets file:
+   ```bash
+   ansible-vault encrypt vars/secrets.yml
+   ```
+
+3. Run the playbook with vault:
+   ```bash
+   ansible-playbook -i inventory.yml deploy.yml --ask-vault-pass
+   ```
+
+#### Option 2: Command-line Extra Variables
+
+Provide credentials directly when running:
+```bash
+ansible-playbook -i inventory.yml deploy.yml \
+  -e "gluetun.openvpn_user=myuser" \
+  -e "gluetun.openvpn_password=mypass"
+```
+
+#### Option 3: Environment Variables
+
+Set credentials as environment variables and reference them:
+```bash
+export VPN_USER="myuser"
+export VPN_PASSWORD="mypass"
+ansible-playbook -i inventory.yml deploy.yml \
+  -e "gluetun.openvpn_user=$VPN_USER" \
+  -e "gluetun.openvpn_password=$VPN_PASSWORD"
+```
 
 ### Namespace
 ```yaml
@@ -75,10 +134,12 @@ namespace: dispatcharr-gluetun
 gluetun:
   vpn_service_provider: nordvpn  # or expressvpn, surfshark, etc.
   vpn_type: openvpn              # or wireguard
-  openvpn_user: "your_username"
-  openvpn_password: "your_password"
+  use_secret: true               # Use Kubernetes Secrets (recommended)
+  # Credentials should be provided via Ansible Vault (see above)
   server_countries: "United States"
 ```
+
+**Security Note**: Credentials are stored in Kubernetes Secrets by default. The playbook automatically creates a secret from the variables you provide (via vault, command-line, or environment variables).
 
 ### Dispatcharr Configuration
 ```yaml
@@ -93,6 +154,8 @@ dispatcharr:
 ```yaml
 service:
   type: ClusterIP  # Options: ClusterIP, NodePort, LoadBalancer
+  gluetun_nodePort: ""  # Only for NodePort (e.g., 30080)
+  dispatcharr_nodePort: ""  # Only for NodePort (e.g., 30081)
 ```
 
 ## Directory Structure
@@ -115,7 +178,13 @@ service:
 
 ### Deploy
 ```bash
-ansible-playbook -i inventory.yml deploy.yml
+# With vault-encrypted secrets
+ansible-playbook -i inventory.yml deploy.yml --ask-vault-pass
+
+# Or with command-line credentials
+ansible-playbook -i inventory.yml deploy.yml \
+  -e "gluetun.openvpn_user=myuser" \
+  -e "gluetun.openvpn_password=mypass"
 ```
 
 ### Verify Deployment

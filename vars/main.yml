@@ -7,8 +7,11 @@ gluetun:
   image: qmcgaw/gluetun:latest
   vpn_service_provider: custom  # Options: nordvpn, expressvpn, surfshark, custom, etc.
   vpn_type: openvpn  # or wireguard
-  openvpn_user: ""  # Your VPN username
-  openvpn_password: ""  # Your VPN password
+  use_secret: true  # Use Kubernetes Secrets for credentials (recommended)
+  # SECURITY: Do not store credentials here! Use Ansible Vault or Kubernetes Secrets
+  # See README for secure credential management
+  openvpn_user: ""  # Provide via --extra-vars or encrypted vault
+  openvpn_password: ""  # Provide via --extra-vars or encrypted vault
   server_countries: ""  # e.g., "United States"
   server_regions: ""  # e.g., "US East"
   
@@ -61,4 +64,5 @@ storage:
 # Service configuration
 service:
   type: ClusterIP  # Options: ClusterIP, NodePort, LoadBalancer
-  nodePort: ""  # Only used if type is NodePort
+  gluetun_nodePort: ""  # Only used if type is NodePort (e.g., 30080)
+  dispatcharr_nodePort: ""  # Only used if type is NodePort (e.g., 30081)
