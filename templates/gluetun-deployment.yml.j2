@@ -1,0 +1,75 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gluetun
+  namespace: {{ namespace }}
+  labels:
+    app: gluetun
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gluetun
+  template:
+    metadata:
+      labels:
+        app: gluetun
+    spec:
+      containers:
+      - name: gluetun
+        image: {{ gluetun.image }}
+        securityContext:
+          capabilities:
+            add:
+{% for cap in gluetun.capabilities %}
+            - {{ cap }}
+{% endfor %}
+        env:
+        - name: VPN_SERVICE_PROVIDER
+          value: "{{ gluetun.vpn_service_provider }}"
+        - name: VPN_TYPE
+          value: "{{ gluetun.vpn_type }}"
+{% if gluetun.openvpn_user %}
+        - name: OPENVPN_USER
+          value: "{{ gluetun.openvpn_user }}"
+{% endif %}
+{% if gluetun.openvpn_password %}
+        - name: OPENVPN_PASSWORD
+          value: "{{ gluetun.openvpn_password }}"
+{% endif %}
+{% if gluetun.server_countries %}
+        - name: SERVER_COUNTRIES
+          value: "{{ gluetun.server_countries }}"
+{% endif %}
+{% if gluetun.server_regions %}
+        - name: SERVER_REGIONS
+          value: "{{ gluetun.server_regions }}"
+{% endif %}
+        - name: HTTPPROXY
+          value: "on"
+        - name: SHADOWSOCKS
+          value: "on"
+        ports:
+        - containerPort: {{ gluetun.ports.http_proxy }}
+          name: http-proxy
+          protocol: TCP
+        - containerPort: {{ gluetun.ports.shadowsocks }}
+          name: shadowsocks
+          protocol: TCP
+        resources:
+          requests:
+            cpu: {{ gluetun.resources.requests.cpu }}
+            memory: {{ gluetun.resources.requests.memory }}
+          limits:
+            cpu: {{ gluetun.resources.limits.cpu }}
+            memory: {{ gluetun.resources.limits.memory }}
+{% if storage.enabled %}
+        volumeMounts:
+        - name: gluetun-config
+          mountPath: /gluetun
+      volumes:
+      - name: gluetun-config
+        persistentVolumeClaim:
+          claimName: {{ storage.gluetun_config_pvc }}
+{% endif %}

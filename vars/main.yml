@@ -1,0 +1,64 @@
+---
+# Namespace configuration
+namespace: dispatcharr-gluetun
+
+# Gluetun VPN configuration
+gluetun:
+  image: qmcgaw/gluetun:latest
+  vpn_service_provider: custom  # Options: nordvpn, expressvpn, surfshark, custom, etc.
+  vpn_type: openvpn  # or wireguard
+  openvpn_user: ""  # Your VPN username
+  openvpn_password: ""  # Your VPN password
+  server_countries: ""  # e.g., "United States"
+  server_regions: ""  # e.g., "US East"
+  
+  # Port configurations
+  ports:
+    http_proxy: 8888
+    shadowsocks: 8388
+    
+  # Resource limits
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+  
+  # Capabilities required for VPN
+  capabilities:
+    - NET_ADMIN
+
+# Dispatcharr configuration
+dispatcharr:
+  image: dispatcharr/dispatcharr:latest
+  
+  # Port configuration
+  port: 8080
+  
+  # Resource limits
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+  
+  # Environment variables
+  env:
+    LOG_LEVEL: "info"
+    # Add your custom environment variables here
+
+# Storage configuration (optional)
+storage:
+  enabled: false
+  gluetun_config_pvc: gluetun-config
+  gluetun_config_size: 1Gi
+  storage_class: ""  # Leave empty for default storage class
+
+# Service configuration
+service:
+  type: ClusterIP  # Options: ClusterIP, NodePort, LoadBalancer
+  nodePort: ""  # Only used if type is NodePort

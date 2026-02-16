@@ -1,0 +1,20 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dispatcharr
+  namespace: {{ namespace }}
+  labels:
+    app: dispatcharr
+spec:
+  type: {{ service.type }}
+  selector:
+    app: dispatcharr
+  ports:
+  - name: http
+    port: {{ dispatcharr.port }}
+    targetPort: {{ dispatcharr.port }}
+    protocol: TCP
+{% if service.type == "NodePort" and service.nodePort %}
+    nodePort: {{ service.nodePort | int + 1 }}
+{% endif %}
