@@ -1,0 +1,500 @@
+- name: dispatcharr Modular Deployment with MetalLB (Gluetun sidecar for Web only)
+  hosts: master
+  gather_facts: false
+
+  vars:
+    desired_state: "present"
+    namespace: livetv
+  
+    dispatcharr_image: "ghcr.io/dispatcharr/dispatcharr:latest"
+    postgres_image: "postgres:17"
+    redis_image: "redis:latest"
+    gluetun_image: "qmcgaw/gluetun:latest"
+
+    # Storage sizes
+    postgres_storage: "5Gi"
+    redis_storage: "1Gi"
+    dispatcharr_storage: "5Gi"
+
+    # Ports
+    dispatcharr_port: 9191
+    postgres_svc_port: 5432
+    redis_svc_port: 6379
+
+    dispatcharr_spread_anti_affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+                - key: app.kubernetes.io/part-of
+                  operator: In
+                  values: ["dispatcharr"]
+            topologyKey: kubernetes.io/hostname
+
+    dispatcharr_topology_spread:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/part-of: dispatcharr
+
+  tasks:
+    - name: Create namespace for dispatcharr
+      kubernetes.core.k8s:
+        kubeconfig: /etc/rancher/k3s/k3s.yaml
+        state: "{{ desired_state }}"
+        api_version: v1
+        kind: Namespace
+        name: "{{ namespace }}"
+
+    # ----------------------------
+    # Secrets
+    # ----------------------------
+    - name: Create secret for Postgres password
+      kubernetes.core.k8s:
+        kubeconfig: /etc/rancher/k3s/k3s.yaml
+        state: "{{ desired_state }}"
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: dispatcharr-db-secret
+            namespace: "{{ namespace }}"
+          type: Opaque
+          stringData:
+            POSTGRES_PASSWORD: "{{ postgres_password }}"
+
+    - name: Create secret for Dispatcharr Django secret key
+      kubernetes.core.k8s:
+        kubeconfig: /etc/rancher/k3s/k3s.yaml
+        state: "{{ desired_state }}"
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: dispatcharr-django-secret
+            namespace: "{{ namespace }}"
+          type: Opaque
+          stringData:
+            DJANGO_SECRET_KEY: "{{ dispatcharr_django_secret_key }}"
+
+    - name: Create secret for Gluetun WireGuard private key (NordVPN)
+      kubernetes.core.k8s:
+        kubeconfig: /etc/rancher/k3s/k3s.yaml
+        state: "{{ desired_state }}"
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: gluetun-wg-secret
+            namespace: "{{ namespace }}"
+          type: Opaque
+          stringData:
+            WIREGUARD_PRIVATE_KEY: "{{ gluetun_wireguard_private_key }}"
+
+    # ----------------------------
+    # PVCs
+    # ----------------------------
+    - name: Create PostgreSQL PVC
+      kubernetes.core.k8s:
+        kubeconfig: /etc/rancher/k3s/k3s.yaml
+        state: "{{ desired_state }}"
+        definition:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            namespace: "{{ namespace }}"
+            name: postgres-data
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            resources:
+              requests:
+                storage: "{{ postgres_storage }}"
+
+    - name: Create Redis PVC
+      kubernetes.core.k8s:
+        kubeconfig: /etc/rancher/k3s/k3s.yaml
+        state: "{{ desired_state }}"
+        definition:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            namespace: "{{ namespace }}"
+            name: redis-data
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            resources:
+              requests:
+                storage: "{{ redis_storage }}"
+
+    - name: Create Dispatcharr Data PVC (/data)
+      kubernetes.core.k8s:
+        kubeconfig: /etc/rancher/k3s/k3s.yaml
+        state: "{{ desired_state }}"
+        definition:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            namespace: "{{ namespace }}"
+            name: dispatcharr-data
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            resources:
+              requests:
+                storage: "{{ dispatcharr_storage }}"
+
+    # ----------------------------
+    # PostgreSQL (17+)
+    # ----------------------------
+    - name: Deploy PostgreSQL
+      kubernetes.core.k8s:
+        kubeconfig: /etc/rancher/k3s/k3s.yaml
+        state: "{{ desired_state }}"
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: dispatcharr-db
+            namespace: "{{ namespace }}"
+            labels:
+              app: dispatcharr-db
+              app.kubernetes.io/part-of: dispatcharr
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: dispatcharr-db
+            template:
+              metadata:
+                labels:
+                  app: dispatcharr-db
+                  app.kubernetes.io/part-of: dispatcharr
+              spec:
+                affinity: "{{ dispatcharr_spread_anti_affinity }}"
+                topologySpreadConstraints: "{{ dispatcharr_topology_spread }}"
+                containers:
+                  - name: postgres
+                    image: "{{ postgres_image }}"
+                    env:
+                      - name: PGDATA
+                        value: /var/lib/postgresql/data/pgdata
+                      - name: POSTGRES_DB
+                        value: "{{ postgres_db }}"
+                      - name: POSTGRES_USER
+                        value: "{{ postgres_user }}"
+                      - name: POSTGRES_PASSWORD
+                        valueFrom:
+                          secretKeyRef:
+                            name: dispatcharr-db-secret
+                            key: POSTGRES_PASSWORD
+                    ports:
+                      - name: postgres
+                        containerPort: 5432
+                    volumeMounts:
+                      - name: postgres-data
+                        mountPath: /var/lib/postgresql/data
+                volumes:
+                  - name: postgres-data
+                    persistentVolumeClaim:
+                      claimName: postgres-data
+
+    - name: Create PostgreSQL Service
+      kubernetes.core.k8s:
+        kubeconfig: /etc/rancher/k3s/k3s.yaml
+        state: "{{ desired_state }}"
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: "{{ postgres_host }}"
+            namespace: "{{ namespace }}"
+            labels:
+              app: dispatcharr-db
+              app.kubernetes.io/part-of: dispatcharr
+          spec:
+            ports:
+              - name: postgres
+                port: 5432
+                targetPort: 5432
+            selector:
+              app: dispatcharr-db
+
+    # ----------------------------
+    # Redis
+    # ----------------------------
+    - name: Deploy Redis
+      kubernetes.core.k8s:
+        kubeconfig: /etc/rancher/k3s/k3s.yaml
+        state: "{{ desired_state }}"
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: dispatcharr-redis
+            namespace: "{{ namespace }}"
+            labels:
+              app: dispatcharr-redis
+              app.kubernetes.io/part-of: dispatcharr
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: dispatcharr-redis
+            template:
+              metadata:
+                labels:
+                  app: dispatcharr-redis
+                  app.kubernetes.io/part-of: dispatcharr
+              spec:
+                affinity: "{{ dispatcharr_spread_anti_affinity }}"
+                topologySpreadConstraints: "{{ dispatcharr_topology_spread }}"
+                containers:
+                  - name: redis
+                    image: "{{ redis_image }}"
+                    ports:
+                      - name: redis
+                        containerPort: 6379
+                    volumeMounts:
+                      - name: redis-data
+                        mountPath: /data
+                volumes:
+                  - name: redis-data
+                    persistentVolumeClaim:
+                      claimName: redis-data
+
+    - name: Create Redis Service
+      kubernetes.core.k8s:
+        kubeconfig: /etc/rancher/k3s/k3s.yaml
+        state: "{{ desired_state }}"
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: "{{ redis_host }}"
+            namespace: "{{ namespace }}"
+            labels:
+              app: dispatcharr-redis
+              app.kubernetes.io/part-of: dispatcharr
+          spec:
+            ports:
+              - name: redis
+                port: 6379
+                targetPort: 6379
+            selector:
+              app: dispatcharr-redis
+
+    # ----------------------------
+    # Dispatcharr Web + Gluetun sidecar (VPN)
+    # ----------------------------
+    - name: Deploy Dispatcharr Web (with Gluetun sidecar)
+      kubernetes.core.k8s:
+        kubeconfig: /etc/rancher/k3s/k3s.yaml
+        state: "{{ desired_state }}"
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: dispatcharr-web
+            namespace: "{{ namespace }}"
+            labels:
+              app: dispatcharr-web
+              app.kubernetes.io/part-of: dispatcharr
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: dispatcharr-web
+            template:
+              metadata:
+                labels:
+                  app: dispatcharr-web
+                  app.kubernetes.io/part-of: dispatcharr
+              spec:
+                affinity: "{{ dispatcharr_spread_anti_affinity }}"
+                topologySpreadConstraints: "{{ dispatcharr_topology_spread }}"
+                containers:
+                  - name: gluetun
+                    image: "{{ gluetun_image }}"
+                    securityContext:
+                      capabilities:
+                        add: ["NET_ADMIN"]
+                    env:
+                      - name: VPN_SERVICE_PROVIDER
+                        value: "nordvpn"
+                      - name: VPN_TYPE
+                        value: "wireguard"
+                      - name: WIREGUARD_PRIVATE_KEY
+                        valueFrom:
+                          secretKeyRef:
+                            name: gluetun-wg-secret
+                            key: WIREGUARD_PRIVATE_KEY
+
+                      - name: SERVER_COUNTRIES
+                        value: "{{ gluetun_server_countries }}"
+                      - name: SERVER_CITIES #this might not be needed if you dont want to specify.  
+                        value: "Some City"
+
+                      - name: FIREWALL_INPUT_PORTS
+                        value: "9191"
+
+                      - name: FIREWALL_OUTBOUND_SUBNETS
+                        value: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+
+                      - name: DNS
+                        value: "{{ gluetun_dns }}"
+                      - name: TZ
+                        value: "{{ tz }}"
+                    volumeMounts:
+                      - name: dev-net-tun
+                        mountPath: /dev/net/tun
+
+                  - name: dispatcharr-web
+                    image: "{{ dispatcharr_image }}"
+                    ports:
+                      - name: http
+                        containerPort: 9191
+                    env:
+                      - name: DISPATCHARR_ENV
+                        value: "{{ dispatcharr_env }}"
+                      - name: DISPATCHARR_LOG_LEVEL
+                        value: "{{ dispatcharr_log_level }}"
+
+                      - name: DJANGO_SECRET_KEY
+                        valueFrom:
+                          secretKeyRef:
+                            name: dispatcharr-django-secret
+                            key: DJANGO_SECRET_KEY
+
+                      - name: DJANGO_SETTINGS_MODULE
+                        value: "{{ django_settings_module }}"
+                      - name: PYTHONUNBUFFERED
+                        value: "{{ pythonunbuffered }}"
+
+                      - name: POSTGRES_HOST
+                        value: "{{ postgres_host }}"
+                      - name: POSTGRES_PORT
+                        value: "{{ postgres_port }}"
+                      - name: POSTGRES_DB
+                        value: "{{ postgres_db }}"
+                      - name: POSTGRES_USER
+                        value: "{{ postgres_user }}"
+                      - name: POSTGRES_PASSWORD
+                        valueFrom:
+                          secretKeyRef:
+                            name: dispatcharr-db-secret
+                            key: POSTGRES_PASSWORD
+
+                      - name: REDIS_HOST
+                        value: "{{ redis_host }}"
+                      - name: REDIS_PORT
+                        value: "{{ redis_port }}"
+                      - name: REDIS_DB
+                        value: "0"
+
+                    volumeMounts:
+                      - name: dispatcharr-data
+                        mountPath: /data
+
+                volumes:
+                  - name: dispatcharr-data
+                    persistentVolumeClaim:
+                      claimName: dispatcharr-data
+                  - name: dev-net-tun
+                    hostPath:
+                      path: /dev/net/tun
+                      type: CharDevice
+
+    - name: Create LoadBalancer Service for Dispatcharr Web
+      kubernetes.core.k8s:
+        kubeconfig: /etc/rancher/k3s/k3s.yaml
+        state: "{{ desired_state }}"
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: dispatcharr-web
+            namespace: "{{ namespace }}"
+            labels:
+              app: dispatcharr-web
+              app.kubernetes.io/part-of: dispatcharr
+          spec:
+            type: LoadBalancer
+            ports:
+              - name: http
+                port: 9191
+                targetPort: 9191
+            selector:
+              app: dispatcharr-web
+
+    # ----------------------------
+    # Celery Worker (NO VPN)
+    # ----------------------------
+    - name: Deploy Dispatcharr Celery Worker (no VPN)
+      kubernetes.core.k8s:
+        kubeconfig: /etc/rancher/k3s/k3s.yaml
+        state: "{{ desired_state }}"
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: dispatcharr-celery
+            namespace: "{{ namespace }}"
+            labels:
+              app: dispatcharr-celery
+              app.kubernetes.io/part-of: dispatcharr
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: dispatcharr-celery
+            template:
+              metadata:
+                labels:
+                  app: dispatcharr-celery
+                  app.kubernetes.io/part-of: dispatcharr
+              spec:
+                affinity: "{{ dispatcharr_spread_anti_affinity }}"
+                topologySpreadConstraints: "{{ dispatcharr_topology_spread }}"
+                containers:
+                  - name: dispatcharr-celery
+                    image: "{{ dispatcharr_image }}"
+                    command: ["celery"]
+                    args: ["-A", "dispatcharr", "worker", "-l", "info"]
+                    env:
+                      - name: DISPATCHARR_ENV
+                        value: "{{ dispatcharr_env }}"
+                      - name: DISPATCHARR_LOG_LEVEL
+                        value: "{{ dispatcharr_log_level }}"
+
+                      - name: DJANGO_SECRET_KEY
+                        valueFrom:
+                          secretKeyRef:
+                            name: dispatcharr-django-secret
+                            key: DJANGO_SECRET_KEY
+
+                      - name: DJANGO_SETTINGS_MODULE
+                        value: "{{ django_settings_module }}"
+                      - name: PYTHONUNBUFFERED
+                        value: "{{ pythonunbuffered }}"
+
+                      - name: POSTGRES_HOST
+                        value: "{{ postgres_host }}"
+                      - name: POSTGRES_PORT
+                        value: "{{ postgres_port }}"
+                      - name: POSTGRES_DB
+                        value: "{{ postgres_db }}"
+                      - name: POSTGRES_USER
+                        value: "{{ postgres_user }}"
+                      - name: POSTGRES_PASSWORD
+                        valueFrom:
+                          secretKeyRef:
+                            name: dispatcharr-db-secret
+                            key: POSTGRES_PASSWORD
+
+                      - name: REDIS_HOST
+                        value: "{{ redis_host }}"
+                      - name: REDIS_PORT
+                        value: "{{ redis_port }}"
+                      - name: REDIS_DB
+                        value: "0"
