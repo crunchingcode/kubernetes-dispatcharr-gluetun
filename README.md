@@ -127,7 +127,7 @@ ansible-playbook -i inventory.yml deploy.yml \
 
 ### Namespace
 ```yaml
-namespace: dispatcharr-gluetun
+k8s_namespace: dispatcharr-gluetun
 ```
 
 ### VPN Configuration (Gluetun)

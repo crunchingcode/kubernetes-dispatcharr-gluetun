@@ -1,6 +1,6 @@
 ---
 # Namespace configuration
-namespace: dispatcharr-gluetun
+k8s_namespace: dispatcharr-gluetun
 
 # Gluetun VPN configuration
 gluetun:

@@ -24,7 +24,7 @@
           apiVersion: v1
           kind: Namespace
           metadata:
-            name: "{{ namespace }}"
+            name: "{{ k8s_namespace }}"
 
     - name: Create VPN credentials secret
       kubernetes.core.k8s:
@@ -34,7 +34,7 @@
           kind: Secret
           metadata:
             name: "{{ gluetun.secret_name }}"
-            namespace: "{{ namespace }}"
+            namespace: "{{ k8s_namespace }}"
           type: Opaque
           stringData:
             vpn-user: "{{ gluetun.openvpn_user | default('') }}"
@@ -64,7 +64,7 @@
     - name: Wait for gluetun to be ready
       kubernetes.core.k8s_info:
         kind: Deployment
-        namespace: "{{ namespace }}"
+        namespace: "{{ k8s_namespace }}"
         name: gluetun
         wait: yes
         wait_timeout: 300
@@ -75,7 +75,7 @@
     - name: Wait for dispatcharr to be ready
       kubernetes.core.k8s_info:
         kind: Deployment
-        namespace: "{{ namespace }}"
+        namespace: "{{ k8s_namespace }}"
         name: dispatcharr
         wait: yes
         wait_timeout: 300
@@ -86,7 +86,7 @@
     - name: Display service information
       kubernetes.core.k8s_info:
         kind: Service
-        namespace: "{{ namespace }}"
+        namespace: "{{ k8s_namespace }}"
       register: services
 
     - name: Show deployed services
