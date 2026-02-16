@@ -4,10 +4,11 @@ namespace: dispatcharr-gluetun
 
 # Gluetun VPN configuration
 gluetun:
-  image: qmcgaw/gluetun:latest
+  image: qmcgaw/gluetun:v3  # Pin to a specific version in production (e.g., v3.35.0)
   vpn_service_provider: custom  # Options: nordvpn, expressvpn, surfshark, custom, etc.
   vpn_type: openvpn  # or wireguard
   use_secret: true  # Use Kubernetes Secrets for credentials (recommended)
+  secret_name: gluetun-vpn-credentials  # Name of the Kubernetes secret
   # SECURITY: Do not store credentials here! Use Ansible Vault or Kubernetes Secrets
   # See README for secure credential management
   openvpn_user: ""  # Provide via --extra-vars or encrypted vault
@@ -35,7 +36,7 @@ gluetun:
 
 # Dispatcharr configuration
 dispatcharr:
-  image: dispatcharr/dispatcharr:latest
+  image: dispatcharr/dispatcharr:v1  # Pin to a specific version in production (e.g., v1.2.0)
   
   # Port configuration
   port: 8080

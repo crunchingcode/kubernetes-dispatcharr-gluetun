@@ -30,16 +30,16 @@ spec:
           value: "{{ gluetun.vpn_service_provider }}"
         - name: VPN_TYPE
           value: "{{ gluetun.vpn_type }}"
-{% if gluetun.use_secret | default(true) %}
+{% if gluetun.use_secret %}
         - name: OPENVPN_USER
           valueFrom:
             secretKeyRef:
-              name: gluetun-vpn-credentials
+              name: "{{ gluetun.secret_name }}"
               key: vpn-user
         - name: OPENVPN_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: gluetun-vpn-credentials
+              name: "{{ gluetun.secret_name }}"
               key: vpn-password
 {% else %}
 {% if gluetun.openvpn_user %}

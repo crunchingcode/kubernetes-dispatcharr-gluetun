@@ -6,11 +6,16 @@
     - vars/main.yml
 
   tasks:
+    - name: Check if secrets file exists
+      stat:
+        path: vars/secrets.yml
+      register: secrets_file
+      delegate_to: localhost
+
     - name: Include secrets file if it exists
       include_vars:
         file: vars/secrets.yml
-      failed_when: false
-      tags: always
+      when: secrets_file.stat.exists
 
     - name: Create namespace
       kubernetes.core.k8s:
@@ -28,7 +33,7 @@
           apiVersion: v1
           kind: Secret
           metadata:
-            name: gluetun-vpn-credentials
+            name: "{{ gluetun.secret_name }}"
             namespace: "{{ namespace }}"
           type: Opaque
           stringData:

@@ -39,6 +39,7 @@ To install, you run:
 
 ```bash
 # 1. Clone this repository
+# Replace the URL with your fork if you've customized the setup
 git clone https://github.com/crunchingcode/kubernetes-dispatcharr-gluetun.git
 cd kubernetes-dispatcharr-gluetun
 
