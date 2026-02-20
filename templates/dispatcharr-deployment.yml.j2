@@ -1,0 +1,41 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dispatcharr
+  namespace: {{ k8s_namespace }}
+  labels:
+    app: dispatcharr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dispatcharr
+  template:
+    metadata:
+      labels:
+        app: dispatcharr
+    spec:
+      containers:
+      - name: dispatcharr
+        image: {{ dispatcharr.image }}
+        env:
+{% for key, value in dispatcharr.env.items() %}
+        - name: {{ key }}
+          value: "{{ value }}"
+{% endfor %}
+        - name: HTTP_PROXY
+          value: "http://gluetun:{{ gluetun.ports.http_proxy }}"
+        - name: HTTPS_PROXY
+          value: "http://gluetun:{{ gluetun.ports.http_proxy }}"
+        ports:
+        - containerPort: {{ dispatcharr.port }}
+          name: http
+          protocol: TCP
+        resources:
+          requests:
+            cpu: {{ dispatcharr.resources.requests.cpu }}
+            memory: {{ dispatcharr.resources.requests.memory }}
+          limits:
+            cpu: {{ dispatcharr.resources.limits.cpu }}
+            memory: {{ dispatcharr.resources.limits.memory }}

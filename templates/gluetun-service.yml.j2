@@ -1,0 +1,24 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gluetun
+  namespace: {{ k8s_namespace }}
+  labels:
+    app: gluetun
+spec:
+  type: {{ service.type }}
+  selector:
+    app: gluetun
+  ports:
+  - name: http-proxy
+    port: {{ gluetun.ports.http_proxy }}
+    targetPort: {{ gluetun.ports.http_proxy }}
+    protocol: TCP
+{% if service.type == "NodePort" and service.gluetun_nodePort %}
+    nodePort: {{ service.gluetun_nodePort }}
+{% endif %}
+  - name: shadowsocks
+    port: {{ gluetun.ports.shadowsocks }}
+    targetPort: {{ gluetun.ports.shadowsocks }}
+    protocol: TCP

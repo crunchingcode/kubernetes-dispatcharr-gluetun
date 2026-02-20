@@ -1,0 +1,94 @@
+---
+- name: Deploy dispatcharr-gluetun to Kubernetes
+  hosts: localhost
+  gather_facts: no
+  vars_files:
+    - vars/main.yml
+
+  tasks:
+    - name: Check if secrets file exists
+      stat:
+        path: vars/secrets.yml
+      register: secrets_file
+      delegate_to: localhost
+
+    - name: Include secrets file if it exists
+      include_vars:
+        file: vars/secrets.yml
+      when: secrets_file.stat.exists
+
+    - name: Create namespace
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: "{{ k8s_namespace }}"
+
+    - name: Create VPN credentials secret
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: "{{ gluetun.secret_name }}"
+            namespace: "{{ k8s_namespace }}"
+          type: Opaque
+          stringData:
+            vpn-user: "{{ gluetun.openvpn_user | default('') }}"
+            vpn-password: "{{ gluetun.openvpn_password | default('') }}"
+      when: gluetun.use_secret | default(true)
+
+    - name: Deploy gluetun VPN container
+      kubernetes.core.k8s:
+        state: present
+        template: templates/gluetun-deployment.yml.j2
+
+    - name: Deploy gluetun service
+      kubernetes.core.k8s:
+        state: present
+        template: templates/gluetun-service.yml.j2
+
+    - name: Deploy dispatcharr
+      kubernetes.core.k8s:
+        state: present
+        template: templates/dispatcharr-deployment.yml.j2
+
+    - name: Deploy dispatcharr service
+      kubernetes.core.k8s:
+        state: present
+        template: templates/dispatcharr-service.yml.j2
+
+    - name: Wait for gluetun to be ready
+      kubernetes.core.k8s_info:
+        kind: Deployment
+        namespace: "{{ k8s_namespace }}"
+        name: gluetun
+        wait: yes
+        wait_timeout: 300
+        wait_condition:
+          type: Available
+          status: "True"
+
+    - name: Wait for dispatcharr to be ready
+      kubernetes.core.k8s_info:
+        kind: Deployment
+        namespace: "{{ k8s_namespace }}"
+        name: dispatcharr
+        wait: yes
+        wait_timeout: 300
+        wait_condition:
+          type: Available
+          status: "True"
+
+    - name: Display service information
+      kubernetes.core.k8s_info:
+        kind: Service
+        namespace: "{{ k8s_namespace }}"
+      register: services
+
+    - name: Show deployed services
+      debug:
+        msg: "Services deployed: {{ services.resources | map(attribute='metadata.name') | list }}"
