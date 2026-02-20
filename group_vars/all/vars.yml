@@ -1,0 +1,30 @@
+# ansible defined parameters
+ansible_connection: ssh
+ansible_user: yourusername
+ansible_ssh_pass: yourpassword
+k3s_token: "yourtoken"
+
+# Postgres (used as env in Postgres + Dispatcharr containers)
+postgres_db: "somedatabasename"
+postgres_user: "somedatabaseuser"
+postgres_password: "somedatabasepassword"
+postgres_host: "dispatcharr-db"
+postgres_port: "5432"
+
+# Redis (used as env in Dispatcharr containers)
+redis_host: "dispatcharr-redis"
+redis_port: "6379"
+
+# Dispatcharr
+dispatcharr_env: "modular"
+dispatcharr_log_level: "info"
+
+# Celery/Django
+django_settings_module: "dispatcharr.settings"
+dispatcharr_django_secret_key: "somedjangopassword"
+pythonunbuffered: "1"
+
+gluetun_wireguard_private_key: "somewireguardprivatekey"   # I use nord so this is the nordlynx key.
+gluetun_server_countries: "Country"      # Specify what country you want the vpn to use.
+gluetun_dns: "somednsserver" #could be 1.1.1.1 or your own
+tz: "UTC" #timezone where you want it to be.
